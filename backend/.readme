@@ -1,0 +1,374 @@
+initialized project
+`npm init -y` 
+a package.json file will be create 
+`npm i express`
+for start express code
+
+https://expressjs.com/
+
+go to get started and and copy code make a server.js file and print that code here change port number 3000 to 5000 and run command 
+
+`node server.js`
+
+for reload server automatically install a package
+
+`npm i -D nodemon`
+
+this command will install as a developer dependency
+
+add script in package.json 
+
+"dev": "nodemon index.js",
+"start": "node server.js",
+
+now you can run these command 
+
+`npm run dev` 
+these command for development mode through this command server will run automatically when something change in server.js file in this case
+
+now connect mongoose with Altas database 
+
+`npm i mongoose`
+
+https://mongoosejs.com/docs/
+
+mongoose is a ORM used to help to communicate with mongodb database
+
+`npm i dotenv`
+https://www.dotenv.org/docs/quickstart
+
+after setting up all environment we will make mongoose model 
+
+install jwt token
+
+`npm i jsonwebtoken`
+
+for get secret key from node open a new terminal and type node here 
+
+`const crypto = require('crypto')`
+`crypto.randomBytes(64).toString('hex')`
+
+after these two command on terminal we will get a string
+
+install cookies middleware and import in server for registration
+
+`npm i cookie-parser`
+
+
+
+
+
+
+
+
+
+
+
+
+///////////////////////******************All about project*******************///////////////////////////
+
+
+whenever we start a backend project we have to follow following steps
+
+1. Set project database configuration 
+
+    1. make a folder database-> file -> index.js
+
+     const mongoose = require('mongoose');
+     const {MONGODB_DATABASE_CONNECTION_STRING} = require('../config/index');
+     const connectionString = MONGODB_DATABASE_CONNECTION_STRING
+
+     const dbConnection = async()=> {
+     try {
+      const connection = await mongoose.connect(connectionString);
+      console.log(`database connected to host : ${connection.connection.host}`);
+     } catch (error) {
+     console.log(`Error : ${error}`);
+     }
+     }
+     module.exports = dbConnection;
+
+    2. folder -> config -> file -> index.js
+
+     const dotenv = require('dotenv').config()
+     const PORT = process.env.PORT
+     const MONGODB_DATABASE_CONNECTION_STRING = process.env.MONGODB_DATABASE_CONNECTION_STRING
+     const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET
+     const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET
+
+     module.exports = {
+     PORT,
+     MONGODB_DATABASE_CONNECTION_STRING,
+     JWT_ACCESS_SECRET,
+     JWT_REFRESH_SECRET,
+     }
+
+    3. file -> .env 
+
+     PORT = 5000
+     MONGODB_DATABASE_CONNECTION_STRING = "past mongodb database connection string here"
+     JWT_ACCESS_SECRET = "get jwt secret key from node terminal and past here"
+     JWT_REFRESH_SECRET = "get one more jwt secret key from node terminal and past here"
+
+     for get secret key from node open a new terminal and type node here 
+     `const crypto = require('crypto')`
+     `crypto.randomBytes(64).toString('hex')`
+
+2. make a file in route folder -> server.js
+
+ const express = require('express');
+ const dbConnection = require('./database/index')
+ const {PORT} = require('./config/index')
+ const port = PORT
+ const router = require('./routes/index') 
+ const errorHandler = require('./middlewares/errorHandler')
+ const cookieParser = require('cookie-parser')
+
+ const app = express();
+ app.use(cookieParser())
+ app.use(express.json());
+ dbConnection()
+ app.use(router)
+ app.use(errorHandler)
+
+ app.listen(port, () => {
+   console.log(`Backend is running on port ${port}`)
+ })
+
+3. folder -> routes -> file -> index.js 
+ const express = require('express')
+ const router = express.Router()
+ const auth = require('../middlewares/auth')
+ const authController = require('../controllers/authController')
+ const blogController = require('../controllers/blogController')
+
+ // 00. main route
+ router.get('/', (req, res) => res.json({
+    message : "Hello world"
+ }))
+
+ // 0. testing route
+ router.get('/test', (req, res) => res.json({
+    message : "This is a Test route"
+ }))
+
+ //**********************authentication routes***********************//
+ // 1. register
+ router.post('/register', authController.register)
+ // 2. login
+ router.post('/login', authController.login)
+ // 3. logout
+ router.post('/logout', auth, authController.logout)
+ // 4. refresh
+ router.get('/refresh', authController.refresh)
+ // 5. forgot password
+ // router.post('/forgot-password', authController.forgotPassword)
+ // 6. reset password
+ // router.post('/reset-password', authController.resetPassword)
+
+ // ************************blog routes********************************//
+ // 1. create blog
+ router.post('/blog', auth, blogController.createBlog);
+ // 2. read all blogs
+ // router.get('/blog/all', auth, blogController.getAllBlog);
+ // 3. read blog by id
+ // router.get('/blog/:id', auth, blogController.getBlogById);
+ // 4. update blog
+ // router.putt('/blog/:id', auth, blogController.updateBlogById)
+ // 5. delete blog
+ // router.delete('/blog/:id', auth, blogController.deleteBlogById)
+
+ // ************************comment routes********************************//
+ // 6. create comment
+ // 7. read comments by blog id
+ // 8. read all comments
+ // 9. read comment by id
+ // 10. update comment
+ // 11. delete comment
+
+ module.exports = router;
+
+4. make a folder -> middlewares ->  file -> errorHandler.js
+    1. errorHandler.js = for handle general errors all over the code 
+     const {ValidationError} = require('joi');
+
+     const errorHandler = (error, req, res, next) => {
+     // default error 
+     let statusCode = 500;
+     let data = {
+        message: 'Internal server error',
+     }
+     if (error instanceof ValidationError) {
+        statusCode = 401;
+        data.message = error.message;
+
+        return res.status(statusCode).json(data);
+     }
+
+     if (error.status) {
+        statusCode = error.status;
+     }
+
+     if (error.message) {
+        data.message = error.message;
+     }
+
+     return res.status(statusCode).json(data);
+
+     }
+     module.exports = errorHandler;
+    2. make a new middleware file for handle authentication error file -> auth.js
+        
+       const JwtService = require('../services/jwtService');
+       const User = require('../models/user'); // Renamed user to User
+       const UserDto = require('../dto/user');
+
+       const auth = async (req, res, next) => {
+     try {
+          const { refreshToken, accessToken } = req.cookies;
+        if (!refreshToken || !accessToken) {
+            const error = {
+                status: 401,
+                message: 'Refresh token and access token are required'
+            };
+            return next(error);
+        }
+    
+        let decodedToken;
+        try {
+            decodedToken = JwtService.verifyAccessToken(accessToken);
+        } catch (error) {
+            return next(error);
+        }
+    
+        let currentUser;
+        try {
+            currentUser = await User.findOne({
+                _id: decodedToken.id
+            });
+        } catch (error) {
+            return next(error);
+        }
+    
+        if (!currentUser) {
+            const error = {
+                status: 404,
+                message: 'User not found'
+            };
+            return next(error);
+        }
+    
+        const userDto = new UserDto(currentUser);
+        req.user = userDto; // Renamed req.users to req.user
+    
+        next();
+     } catch (error) {
+        return next(error);
+     }
+     }
+     module.exports = auth;
+
+5. folder -> controllers
+    1. authControllers.js  = it will handle all data related to auth routes 
+    2. blogControllers.js  = it will handle all data related to blogs routes 
+    3. commentsControllers.js = its will handle data related to comments routes 
+
+6. folder -> services 
+    1. jwtService.js
+       const jwt = require('jsonwebtoken');
+       const { JWT_ACCESS_SECRET, JWT_REFRESH_SECRET } = require('../config/index');
+       const RefreshToken = require('../models/token'); // Import RefreshToken model
+
+       class JwtService {
+        static signAccessToken(payload, expiryTime) {
+        return jwt.sign(payload, JWT_ACCESS_SECRET, { expiresIn: expiryTime });
+        }
+
+        static verifyAccessToken(token) {
+        return jwt.verify(token, JWT_ACCESS_SECRET);
+        }
+
+        static signRefreshToken(payload, expiryTime) {
+        return jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: expiryTime });
+        }
+
+        static verifyRefreshToken(token) {
+        return jwt.verify(token, JWT_REFRESH_SECRET);
+        }
+
+        static async storeRefreshToken(token, userId) {
+        try {
+            const newToken = new RefreshToken({
+                token: token,
+                userId: userId
+            });
+            // Store in the database
+            await newToken.save();
+        } catch (error) {
+            console.log(error);
+        }
+        }
+        }
+
+        module.exports = JwtService;
+
+7. make a folder dto -> file -> user.js
+ // dto data transfer object
+
+ class UserDto{
+    id;
+    name;
+    username;
+    email;
+
+    constructor(user){
+        this.id = user._id;
+        this.username = user.username;
+        this.name = user.name;
+        this.email = user.email;
+    }
+ }
+ module.exports = UserDto;
+
+8. make a folder models
+   1. user.js
+    const mongoose = require('mongoose');
+    const {Schema} = mongoose;
+    const userSchema = new Schema({
+    name: {type: String, required: true},
+    username: {type: String, required: true},
+    email : {type: String, required: true},
+    password : {type: String, required: true},
+    },
+    {
+        timestamps: true
+    }
+    );
+    module.exports = mongoose.model('user', userSchema, 'users');
+
+    2. token.js
+    // this is a model to store refresh token
+    const mongoose = require('mongoose');
+    const { Schema } = mongoose;
+    const refreshTokenSchema = new Schema({
+    token: {type: String, required: true},
+    userId: {type: mongoose.SchemaTypes.ObjectId, ref: 'users'}
+    },
+    {timestamps: true}
+    )
+    module.exports = mongoose.model('RefreshToken', refreshTokenSchema, 'tokens');
+
+    3. blog.js
+    
+
+     
+
+
+
+
+
+
+
+
+
+
